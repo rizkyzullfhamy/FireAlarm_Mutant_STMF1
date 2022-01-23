@@ -7,7 +7,9 @@
 #define ledPin PC13 //13
 #define smpsPin PA0 //ADC PIN 
 #define batPin  PA1 //ADC PIN 
-#define relayPin PA7 // RELAY PIN     
+#define relayPin PA7 // RELAY PIN  
+#define rs485DE PB6
+#define rs485RE PB7    
 
 void printDigits(int digits);
 void digitalClockDisplay();
@@ -23,15 +25,41 @@ String dt[20];
 char tmp[100];
 String dataF4[20];
 int dateTimee[6];
-int i;
+int i = 0;
 bool parsing=false;
 bool flagSetTime = false;
 float voltSmps, voltBatrai;
 uint8_t kondisiSupply;         
 HardwareSerial MySerial1(PA10, PA9);    // RX,TX
+ModbusMaster node;   
+uint16_t counting = 0;
+
+void preTransmission() //Fungsi untuk menyetel stste Pin DE & RE RS-485
+{
+  digitalWrite(rs485RE, LOW);             
+  digitalWrite(rs485DE, HIGH);
+}
+
+void postTransmission()
+{
+  digitalWrite(rs485RE, LOW);
+  digitalWrite(rs485DE, HIGH);
+}
 
 void setup() {
   // put your setup code here, to run once:
+  pinMode(rs485DE, OUTPUT);
+  pinMode(rs485RE, OUTPUT);
+
+  // SET RS485 TO RECEIVE =>  made LOW to receive data and made HIGH to write data to RS-485 bus
+  digitalWrite(rs485RE, HIGH);    // ACTIVE LOW
+  digitalWrite(rs485DE, HIGH);     // ACTIVE HIGH
+
+  MySerial1.begin(9600);
+  node.begin(1, MySerial1);
+  // node.preTransmission(preTransmission); 
+  // node.postTransmission(postTransmission);
+  /*
   pinMode(ledPin,OUTPUT);
   pinMode(relayPin,OUTPUT);
   digitalWrite(ledPin, HIGH);
@@ -61,11 +89,18 @@ void setup() {
     break;
     }
   }
+  */
 
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
+  counting += 9;
+  i += 10;
+      node.writeSingleRegister(((uint16_t)0x40000),counting);        //Writes value to 0x40000 holding register
+      node.writeSingleRegister(((uint16_t)0x40001),i);        //Writes value to 0x40000 holding register
+  delay(1000);
+  /*
   if(flagSetTime == true){
   if(MySerial1.available() > 0){
     delay(10);
@@ -102,6 +137,7 @@ void loop() {
   digitalClockDisplay();
   delay(1000);
   }
+  */
 
 }
 
