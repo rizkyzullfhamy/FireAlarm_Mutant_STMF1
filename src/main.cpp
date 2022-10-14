@@ -1,247 +1,109 @@
+/**
+ * Author Rizky Zull Fhamy PC
+ * PROJECT FIRE-ALARM
+ * BUILD BY STM32F1
+ */
+
+/* _____PROJECT INCLUDES_____________________________________________________ */
 #include <Arduino.h>
-#include <time.h>
-#include <TimeLib.h>
 #include <stdbool.h>
-#include <ModbusMaster.h> 
+#include <header.h>
 
-#define ledPin PC13 //13
-#define smpsPin PA0 //ADC PIN 
-#define batPin  PA1 //ADC PIN 
-#define relayPin PA7 // RELAY PIN  
-#define rs485DE PB6
-#define rs485RE PB7    
-
-void printDigits(int digits);
-void digitalClockDisplay();
-void parsingData();
-void parsingDataF4();
-void parsingSetDataTimeByF4();
-void batrai_smps();
-float adcAccess(uint32_t pinAdc);
-
-char buffer[200];
-String dataIn;
-String dt[20];
-char tmp[100];
-String dataF4[20];
-int dateTimee[6];
+/* _____GLOBAL VARIABLES_____________________________________________________ */
 int i = 0;
-bool parsing=false;
+bool parsing = false;
 bool flagSetTime = false;
-float voltSmps, voltBatrai;
-uint8_t kondisiSupply;         
-HardwareSerial MySerial1(PA10, PA9);    // RX,TX
-ModbusMaster node;   
-uint16_t counting = 0;
 
-void preTransmission() //Fungsi untuk menyetel stste Pin DE & RE RS-485
+unsigned long startMillis1;
+unsigned long startMillis2;
+unsigned long startMillis3;
+unsigned long currentMillis;
+
+void setup()
 {
-  digitalWrite(rs485RE, LOW);             
-  digitalWrite(rs485DE, HIGH);
-}
-
-void postTransmission()
-{
-  digitalWrite(rs485RE, LOW);
-  digitalWrite(rs485DE, HIGH);
-}
-
-void setup() {
   // put your setup code here, to run once:
-  pinMode(rs485DE, OUTPUT);
-  pinMode(rs485RE, OUTPUT);
+  pinMode(rs485DE_RE, OUTPUT);
 
   // SET RS485 TO RECEIVE =>  made LOW to receive data and made HIGH to write data to RS-485 bus
-  digitalWrite(rs485RE, HIGH);    // ACTIVE LOW
-  digitalWrite(rs485DE, HIGH);     // ACTIVE HIGH
+  digitalWrite(rs485DE_RE, HIGH);
 
-  MySerial1.begin(9600);
-  node.begin(1, MySerial1);
-  // node.preTransmission(preTransmission); 
-  // node.postTransmission(postTransmission);
-  /*
-  pinMode(ledPin,OUTPUT);
-  pinMode(relayPin,OUTPUT);
+  MyRS485.begin(19200);
+  node.begin(1, MyRS485);
+
+  pinMode(ledPin, OUTPUT);
+  pinMode(relayPin, OUTPUT);
   digitalWrite(ledPin, HIGH);
   digitalWrite(relayPin, LOW);
   MySerial1.begin(115200);
-  while(1){
-    if(MySerial1.available() > 0){
+  MySerial2.begin(115200);
+
+  while (1)
+  {
+    if (MySerial1.available() > 0)
+    {
       delay(10);
-      char inChar = (char) MySerial1.read();
+      char inChar = (char)MySerial1.read();
       dataIn += inChar;
-        if(inChar == '\n'){
+      if (inChar == '\n')
+      {
         parsing = true;
       }
     }
 
-    if(parsing){
-    parsingSetDataTimeByF4();
-    // FORMAT PARSING WAKTU KE DARI F4 KE F1 =>  JAM,MENIT,DETIK,HARI,BULAN,TAHUN, (CONTOH: 21,5,10,8,1,2022,)
-    setTime(dateTimee[0], dateTimee[1], dateTimee[2], dateTimee[3], dateTimee[4], dateTimee[5]);
-    parsing=false;
-    dataIn="";
-    for(int i = 0; i < 20; i++){
-      dt[i] = "";
-    }
-    flagSetTime = true;
-    digitalWrite(ledPin, LOW);
-    break;
+    if (parsing)
+    {
+      parsingSetDataTimeByF4();
+      // FORMAT PARSING WAKTU KE DARI F4 KE F1 =>  JAM,MENIT,DETIK,HARI,BULAN,TAHUN, (CONTOH: 21,5,10,8,1,2022,)  //1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
+      setTime(dateTimee[0], dateTimee[1], dateTimee[2], dateTimee[3], dateTimee[4], dateTimee[5]);
+      parsing = false;
+      dataIn = "";
+      for (int i = 0; i < 20; i++)
+      {
+        dt[i] = "";
+      }
+      flagSetTime = true;
+      digitalWrite(ledPin, LOW);
+      sendToF4(); // SEND DATETIME TO F4
+      break;
     }
   }
-  */
-
 }
 
-void loop() {
+void loop()
+{
   // put your main code here, to run repeatedly:
-  counting += 9;
-  i += 10;
-      node.writeSingleRegister(((uint16_t)0x40000),counting);        //Writes value to 0x40000 holding register
-      node.writeSingleRegister(((uint16_t)0x40001),i);        //Writes value to 0x40000 holding register
-  delay(1000);
-  /*
-  if(flagSetTime == true){
-  if(MySerial1.available() > 0){
-    delay(10);
-    char inChar = (char) MySerial1.read();
+  currentMillis = millis();
+  if (MySerial1.available() > 0)
+  { // KOMUNIKASI F1 <=> F4
+    char inChar = (char)MySerial1.read();
     dataIn += inChar;
-    if(inChar == '\n'){
+    if (inChar == '\n')
+    {
       parsing = true;
     }
   }
-  if(parsing){
-    // parsingData();
+
+  if (parsing)
+  {
     parsingDataF4();
-    parsing=false;
-    dataIn="";
-  }
-  voltSmps    =  adcAccess(smpsPin);      // SMPS PIN PA0
-  voltBatrai  =  adcAccess(batPin);       // BATRAI PIN PA1
-  batrai_smps();
-  MySerial1.print("data 1 : ");
-  MySerial1.print(dataF4[0]);
-  MySerial1.print(" data 2 : ");
-  MySerial1.print(dataF4[1]);
-  MySerial1.print(" data 3 : ");
-  MySerial1.print(dataF4[2]);
-  MySerial1.print(" data 4 : ");
-  MySerial1.print(dataF4[3]);
-  MySerial1.print(" V SMPS : ");
-  MySerial1.print(voltSmps);
-  MySerial1.print(" V BATR : ");
-  MySerial1.print(voltBatrai);
-  MySerial1.print(" Kondisi Supply: ");
-  MySerial1.print(kondisiSupply);
-  MySerial1.print("\r\n");
-  digitalClockDisplay();
-  delay(1000);
-  }
-  */
-
-}
-
-void parsingDataF4(){
-    int count = 0;
-    MySerial1.print("data masuk : ");
-    MySerial1.print(dataIn);
-    for(int i = 0; i < dataIn.length(); i++){
-      if(dataIn[i] == ','){
-        dataF4[count] = dt[count];
-         dt[count] = "";
-        count++;
-      }else{
-         dt[count] = dt[count]  + dataIn[i];
-      }
-    }
-}
-
-void parsingSetDataTimeByF4(){
-    int count = 0;
-    MySerial1.print("data masuk : ");
-    MySerial1.print(dataIn);
-    for(int i = 0; i < dataIn.length(); i++){
-      if(dataIn[i] == ','){
-        dateTimee[count] = dt[count].toInt();
-         dt[count] = "";
-        count++;
-      }else{
-         dt[count] = dt[count]  + dataIn[i];
-      }
-    }
-    sprintf(buffer, "Hour : %d | Minute : %d | Sec : %d | day : %d | Month : %d | Year : %d", dateTimee[0], dateTimee[1], dateTimee[2], dateTimee[3], dateTimee[4], dateTimee[5]);
-    MySerial1.println(buffer);
-}
-
-void digitalClockDisplay()
-{
-  MySerial1.print(day());
-  MySerial1.print("-");
-  MySerial1.print(month());
-  MySerial1.print("-");
-  MySerial1.print(year());
-  MySerial1.print(",");
-  MySerial1.print(hour());
-  printDigits(minute());
-  printDigits(second());
-  MySerial1.print(" WIB");
-  MySerial1.print("|001|");
-  MySerial1.println();  
-}
-
-void printDigits(int digits)
-{
-  MySerial1.print(":");
-  if(digits < 10)
-  MySerial1.print('0');
-  MySerial1.print(digits);  
-}
-
-float adcAccess(uint32_t pinAdc ){
-  float analogVal = analogRead(pinAdc);
-  float voltage = (0.0336*analogVal)+0.2337;
-  return voltage;
-}
-
-void batrai_smps(){
-  if(voltSmps > 20 && voltBatrai >= 22){
-    // RELAY AKTIF
-    digitalWrite(relayPin, LOW);
-    kondisiSupply = 3;      // SUPPY DAYA PLN & KONDISI BATRAI AMAN
-  }else if(voltSmps < 20 && voltBatrai >= 22){
-    // RELAY NONAKTIF
-    digitalWrite(relayPin, LOW);
-    kondisiSupply = 4;      // SUPPLY DAYA BATRAI & KONDISI BATRAI AMAN
-  }else if((voltBatrai >= 18 && voltBatrai < 22) && (voltSmps > 20)){
-    // relay aktif
-    digitalWrite(relayPin, HIGH);
-    kondisiSupply = 5;   // SUPPLY PLN & BATRAI LOW
-  }else if((voltBatrai >= 18 && voltBatrai < 22) && (voltSmps < 20)){
-    // RELAY NONAKTIF
-    digitalWrite(relayPin, LOW);
-    kondisiSupply = 6;   // SUPPLY BATRAI & BATRAI LOW
-  }else if(voltBatrai < 18 && voltSmps > 20){
-      // RELAY NONAKTIF
-      digitalWrite(relayPin, LOW);
-     kondisiSupply = 7;   // SUPPLY PLN & BATRAI RUSAK
-  }else if(voltBatrai < 18 && voltSmps < 20){
-      // RELAY NONAKTIF
-      digitalWrite(relayPin, LOW);
-     kondisiSupply = 8;   // SUPPLY BATRAI & BATRAI RUSAK
+    parsing = false;
+    dataIn = "";
   }
 
-// SMPS TRIGGER RELAY
-// DIBAWAH 20 VOLT => RELAY ON  => SUPPLY DAYA BATRAI => KODENYA 4
-// DIATAS 20 VOLT => RELAY OFF  => SUPPY DAYA PLN   => KODENYA 3 
+  if (currentMillis - startMillis2 >= 15000)
+  {
+    voltSmps = adcAccess(smpsPin);  // SMPS PIN PA0
+    voltBatrai = adcAccess(batPin); // BATRAI PIN PA1
+    batrai_smps();
+    digitalWrite(ledPin, LOW);
+    startMillis2 = currentMillis;
+  }
 
-// BATRAI
-// DIBAWAH 22 VOLT = > FAULT    => KODE 5 
-// DIATAS 22 VOLT => AMAN
-
-// 18 - 22 BATRAI LOW
-// 0- 18 BATRAI RUSAK 
+  if (currentMillis - startMillis3 >= 60000)
+  {
+    digitalWrite(ledPin, HIGH);
+    sendToF4(); // SEND DATETIME TO F4
+    sendToRS485Scada();
+    startMillis3 = currentMillis;
+  }
 }
-
-
-
-
